@@ -1,0 +1,83 @@
+﻿@page "/"
+@using System.IO
+@using System.Diagnostics
+<div style="display: flex; justify-content: center; margin-bottom: 5%">
+    <h1>JimmyNet GIFmaker</h1>
+</div>
+<div style="display: flex; justify-content: center; margin-bottom: 5% ">
+    <h2>@status</h2>
+</div>
+
+
+@if (done)
+{
+    <div style="display: flex; justify-content: center; margin-bottom: 5% ">
+        <a href="@url">Click here to download</a>
+    </div>
+}
+
+
+<div style="display: flex; justify-content: center; margin-bottom: 5% ">
+    <InputFile OnChange="@LoadFiles" />
+</div>
+<div style="display: flex; justify-content: center; margin-bottom: 5% ">
+
+    <p>
+        <h5>Quality:</h5>
+        Classic: <input name="Radio1" id="Radio1" type="radio" value="Classic" @onchange="SelectionChanged" /> <br />
+        Balanced: <input name="Radio1" id="Radio1" type="radio" value="Balanced" @onchange="SelectionChanged" checked="checked" /> <br />
+        Tiny: <input name="Radio1" id="Radio1" type="radio" value="Tiny" @onchange="SelectionChanged" /> <br />
+        Insane: <input name="Radio1" id="Radio1" type="radio" value="Insane" @onchange="SelectionChanged" /> <br />
+    </p>
+</div>
+@code
+{
+    string giftype = "Balanced";
+    string status = "";
+    string url = "";
+    bool done = false;
+    string vidpath = Data.Constants.VideoPath; // Temporary storage for original videos
+    string outpath = Data.Constants.OutPutPath;  // Output GIFs here
+    string baseurl = Data.Constants.BaseUrl; // Url to access outpath directory - Make sure this is not browsable.
+    void SelectionChanged(ChangeEventArgs args)
+    {
+        giftype = args.Value.ToString();
+    }
+    private async void LoadFiles(InputFileChangeEventArgs e)
+    {
+        //upload = false;
+        status = "Uploading...";
+        this.StateHasChanged();
+        string[] fname = e.File.Name.Split('.');
+        string type = fname[fname.Length - 1];
+        string savefileas = System.Guid.NewGuid().ToString() + "." + type;
+        await using FileStream fs = new(vidpath + savefileas, FileMode.Create);
+        await e.File.OpenReadStream(maxAllowedSize: 1073741824).CopyToAsync(fs);
+        status = "Converting...";
+        this.StateHasChanged();
+        Process p = new Process();
+        p.StartInfo.FileName = "ffmpeg";
+        if (giftype == "Classic")
+        {
+            p.StartInfo.Arguments = "-i " + vidpath + savefileas + " " + outpath + savefileas + ".gif";
+        }
+        else if (giftype == "Balanced")
+        {
+            p.StartInfo.Arguments = "-filter_complex \"[0:v] scale = 480:-1,split[a][b];[a] palettegen[p];[b][p] paletteuse\" -i " + vidpath + savefileas + " " + outpath + savefileas + ".gif";
+        }
+        else if (giftype == "Insane")
+        {
+            p.StartInfo.Arguments = "-filter_complex \"[0:v] scale=w=720:h=-1,split [a][b];[a] palettegen=stats_mode=single [p];[b][p] paletteuse=new=1\" -i " + vidpath + savefileas + " " + outpath + savefileas + ".gif";
+        }
+        else if (giftype == "Tiny")
+        {
+            p.StartInfo.Arguments = "-filter_complex \"[0:v] scale = 120:-1,split[a][b];[a] palettegen[p];[b][p] paletteuse\" -i " + vidpath + savefileas + " " + outpath + savefileas + ".gif";
+        }
+        p.Start();
+        await p.WaitForExitAsync();
+        status = "Done";
+        done = true;
+        url = baseurl + savefileas + ".gif";
+        this.StateHasChanged();
+    }
+}
